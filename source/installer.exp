@@ -1,20 +1,22 @@
 #!/usr/bin/env expect
 
-spawn "./sender.sh"
-set sender $spawn_id
-spawn "./receiver.sh"
-set receiver $spawn_id
+foreach command $argv {
+    spawn $command
+    array set commands_by_spawn_ids [list $spawn_id $command]
+}
+
 set message_id ''
 set message ''
 
 expect {
-  -i sender -re "send (from .* to .*): (.*\n)" {
+  -i [array names commands_by_spawn_ids]
+  -re "send (from .* to .*): (.*\n)" {
     set message_id $expect_out(1,string)
     set message $expect_out(2,string)
     exp_continue
   }
-  -i receiver -re "receive (.*)\n" {
-    send -i receiver $message
+  -re "receive (.*)\n" {
+    send $message
     exp_continue
   }
 }
