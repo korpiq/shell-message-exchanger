@@ -1,0 +1,72 @@
+#!/usr/bin/env expect
+
+set receive_once 0
+
+foreach command $argv {
+    eval spawn $command
+    array set commands_by_spawn_ids [list $spawn_id $command]
+}
+
+# message_id message
+array set messages_from_senders []
+
+# message_id receiver_spawn_id
+array set receivers_for_messages []
+
+proc pass_messages {} {
+    global messages_from_senders
+    global receivers_for_messages
+    global receive_once
+
+    foreach {message_id message} [array get messages_from_senders] {
+        set receivers_found 0
+
+        foreach {target_id receiver_spawn_id} [array get receivers_for_messages $message_id.*] {
+            send_user "'$receiver_spawn_id' gets '$target_id': '$message'\r\n"
+            send -i $receiver_spawn_id "$message\n"
+            incr receivers_found
+        }
+
+        if {$receivers_found > 0} {
+            array unset messages_from_senders $message_id
+            if {$receive_once} {
+                array unset receivers_for_messages $message_id
+            }
+        }
+    }
+}
+
+while {[array size commands_by_spawn_ids] > 0} {
+
+    expect {
+        -i [array names commands_by_spawn_ids]
+        -re "send (.*): (\[^\r\n]*)\r\n" {
+            set id $expect_out(1,string)
+            set message $expect_out(2,string)
+            array set messages_from_senders [list $id $message]
+            pass_messages
+            exp_continue
+        }
+        -re "receive (.*)\r\n" {
+            set current_spawn_id $expect_out(spawn_id)
+            set message_id $expect_out(1,string)
+
+            array set receivers_for_messages [
+                list $message_id.$current_spawn_id $current_spawn_id
+            ]
+            pass_messages
+            exp_continue
+        }
+        eof {
+            set current_spawn_id $expect_out(spawn_id)
+            array unset commands_by_spawn_ids $current_spawn_id
+
+            foreach {target_id receiver_spawn_id} [array get receivers_for_messages] {
+                if {$receiver_spawn_id == $current_spawn_id} {
+                    array unset receivers_for_messages $target_id
+                }
+            }
+        }
+    }
+
+}
