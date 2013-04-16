@@ -1,17 +1,28 @@
 #!/usr/bin/env expect
 
-set receive_once 0
+log_user 0
 
-foreach command $argv {
-    eval spawn $command
-    array set commands_by_spawn_ids [list $spawn_id $command]
-}
+set log_to_file 1
+set receive_once 0
+set send_re "send (.*): (\[^\r\n]*)\r\n"
+set receive_re "receive (\[^\r\n]*)\r\n"
 
 # message_id message
 array set messages_from_senders []
 
 # message_id receiver_spawn_id
 array set receivers_for_messages []
+
+set file_handle stdout
+foreach command $argv {
+    eval spawn $command
+    if {$log_to_file} {
+        set file_handle [open "$command.log" "w"]
+        set time [clock format [clock seconds] -format "\[%Y-%m-%d %T]"]
+        puts $file_handle "$time BEGIN: $command"
+    }
+    array set logs_by_spawn_ids [list $spawn_id $file_handle]
+}
 
 proc pass_messages {} {
     global messages_from_senders
@@ -22,8 +33,7 @@ proc pass_messages {} {
         set receivers_found 0
 
         foreach {target_id receiver_spawn_id} [array get receivers_for_messages $message_id.*] {
-            send_user "'$receiver_spawn_id' gets '$target_id': '$message'\r\n"
-            send -i $receiver_spawn_id "$message\n"
+            send -i $receiver_spawn_id -- "$message\n"
             incr receivers_found
         }
 
@@ -36,20 +46,22 @@ proc pass_messages {} {
     }
 }
 
-while {[array size commands_by_spawn_ids] > 0} {
+while {[array size logs_by_spawn_ids] > 0} {
 
     expect {
-        -i [array names commands_by_spawn_ids]
-        -re "send (.*): (\[^\r\n]*)\r\n" {
+        -i [array names logs_by_spawn_ids]
+        -re $send_re {
             set id $expect_out(1,string)
             set message $expect_out(2,string)
+            puts $logs_by_spawn_ids($expect_out(spawn_id)) "(send $id)\n"
             array set messages_from_senders [list $id $message]
             pass_messages
             exp_continue
         }
-        -re "receive (.*)\r\n" {
+        -re $receive_re {
             set current_spawn_id $expect_out(spawn_id)
             set message_id $expect_out(1,string)
+            puts $logs_by_spawn_ids($expect_out(spawn_id)) "(receive $message_id)"
 
             array set receivers_for_messages [
                 list $message_id.$current_spawn_id $current_spawn_id
@@ -57,9 +69,17 @@ while {[array size commands_by_spawn_ids] > 0} {
             pass_messages
             exp_continue
         }
+        -re "(\[^\r\n]*)\[\r\n]+" {
+            puts $logs_by_spawn_ids($expect_out(spawn_id)) "$expect_out(1,string)"
+        }
         eof {
             set current_spawn_id $expect_out(spawn_id)
-            array unset commands_by_spawn_ids $current_spawn_id
+
+            set time [clock format [clock seconds] -format "\[%Y-%m-%d %T]"]
+            puts $logs_by_spawn_ids($expect_out(spawn_id)) "$time END: $command"
+            close $logs_by_spawn_ids($expect_out(spawn_id))
+
+            array unset logs_by_spawn_ids $current_spawn_id
 
             foreach {target_id receiver_spawn_id} [array get receivers_for_messages] {
                 if {$receiver_spawn_id == $current_spawn_id} {

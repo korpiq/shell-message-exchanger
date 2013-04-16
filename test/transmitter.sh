@@ -1,5 +1,7 @@
 #!/bin/bash
 
+stty -echo # do not show incoming messages
+
 echo "transmitter $* in"
 echo "receive transmissions"
 sleep 1
