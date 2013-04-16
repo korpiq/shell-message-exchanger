@@ -4,7 +4,7 @@ log_user 0
 
 set log_to_file 1
 set receive_once 0
-set send_re "send (.*): (\[^\r\n]*)\r\n"
+set send_re "send (\[^\r\n]*): (\[^\r\n]*)\r\n"
 set receive_re "receive (\[^\r\n]*)\r\n"
 
 # message_id message
