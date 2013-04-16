@@ -1,7 +1,7 @@
 #!/bin/bash
 
 cd $(dirname "$BASH_SOURCE")
-rm *.log
+rm -f *.log
 RESULT=0
 
 run ()
@@ -32,13 +32,23 @@ each_transmitter_got_each_message ()
     done
 }
 
+echo -n 'fail on bad option: '
+OUT=$(run --badmojo=here)
+echo "$OUT" | check grep -q "^Invalid option 'badmojo'"
+
+echo -n 'accept all good options: '
+OUT=$(run --prefix= --suffix= --log= --once= --ask= --tell=)
+check test "$OUT" = ""
+
 echo -n 'try to pass message from one shell to another: '
-run ./sender.sh ./receiver.sh
-check grep -q "got 'a message'" receiver.sh.log
+OUT=$(run ./sender.sh ./receiver.sh)
+echo "$OUT" | check grep -q "got 'a message'"
 
 echo -n 'try to pass messages forth and back between transmitters: '
 
-run "./transmitter.sh Alice" \
+run --log='{}' "./transmitter.sh Alice" \
         "./transmitter.sh Bob" \
         "./transmitter.sh Cecilia"
 check each_transmitter_got_each_message
+
+exit $RESULT

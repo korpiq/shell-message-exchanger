@@ -2,32 +2,84 @@
 
 log_user 0
 
-set log_to_file 1
-set receive_once 0
-set send_re "send (\[^\r\n]*): (\[^\r\n]*)\r\n"
-set receive_re "receive (\[^\r\n]*)\r\n"
-
 # message_id message
 array set messages_from_senders []
 
 # message_id receiver_spawn_id
 array set receivers_for_messages []
 
-set file_handle stdout
-foreach command $argv {
-    eval spawn $command
-    if {$log_to_file} {
-        set file_handle [open "$command.log" "w"]
+# spawn_id file_handle
+array set logs_by_spawn_ids []
+
+# spawn_id command
+array set commands_by_spawn_ids []
+
+array set option []
+set option(log) ""
+set option(once) ""
+set option(ask) "receive"
+set option(tell) "send"
+set option(prefix) ""
+set option(suffix) ""
+
+set option_re "--(\[a-z_]*)=(.*)"
+
+set usage "Usage: command-messenger.exp \[--option=value|command] ...
+Options:
+    log     Filename to log to. Denote command with {}. Default empty=stdout.
+    once    Set to only receive messages once. Default empty=keep receiving.
+    ask     Identifier for listening to messages. Default 'receive'.
+    tell    Identifier for sending messages. Default 'send'.
+    prefix  Prefix for subsequent commands. Default empty.
+    suffix  Suffix for subsequent commands. Default empty.
+    help    Show this usage information and exit.
+"
+
+foreach arg $argv {
+    if {[regexp -- "$option_re" "$arg" all name value]} {
+
+        if {![info exists option($name)]} {
+            send_user "Invalid option '$name'\n$usage"
+            exit 2
+        }
+
+        set option($name) $value
+    } elseif {[regexp -- "--?h(elp)?" $arg]} {
+        send_user "$usage"
+        exit 1
+    } else {
+
+        if {$option(log) > 0} {
+            set log_filename $option(log)
+            if {[regexp -- "(.*){}(.*)" "$option(log)" all prefix suffix]} {
+                set log_filename "$prefix$arg$suffix"
+            }
+            if {![regexp -- ".*\.log$" "$log_filename"]} {
+                set log_filename "$log_filename.log"
+            }
+            set file_handle [open "$log_filename" "w"]
+        } else {
+            set file_handle stdout
+        }
+
+        set full_command "$option(prefix)$arg$option(suffix)"
         set time [clock format [clock seconds] -format "\[%Y-%m-%d %T]"]
-        puts $file_handle "$time BEGIN: $command"
+
+        puts $file_handle "$time BEGIN: $full_command"
+        eval spawn "$full_command"
+
+        array set logs_by_spawn_ids [list $spawn_id $file_handle]
+        array set commands_by_spawn_ids [list $spawn_id $full_command]
     }
-    array set logs_by_spawn_ids [list $spawn_id $file_handle]
 }
+
+set send_re "$option(tell) (\[^\r\n]*): (\[^\r\n]*)\r\n"
+set receive_re "$option(ask) (\[^\r\n]*)\r\n"
 
 proc pass_messages {} {
     global messages_from_senders
     global receivers_for_messages
-    global receive_once
+    global option
 
     foreach {message_id message} [array get messages_from_senders] {
         set receivers_found 0
@@ -39,7 +91,7 @@ proc pass_messages {} {
 
         if {$receivers_found > 0} {
             array unset messages_from_senders $message_id
-            if {$receive_once} {
+            if {$option(once) > 0} {
                 array unset receivers_for_messages $message_id
             }
         }
@@ -71,18 +123,21 @@ while {[array size logs_by_spawn_ids] > 0} {
         }
         -re "(\[^\r\n]*)\[\r\n]+" {
             puts $logs_by_spawn_ids($expect_out(spawn_id)) "$expect_out(1,string)"
+            exp_continue
         }
         eof {
-            set current_spawn_id $expect_out(spawn_id)
+            set spawn_id $expect_out(spawn_id)
 
             set time [clock format [clock seconds] -format "\[%Y-%m-%d %T]"]
-            puts $logs_by_spawn_ids($expect_out(spawn_id)) "$time END: $command"
-            close $logs_by_spawn_ids($expect_out(spawn_id))
+            set command $commands_by_spawn_ids($spawn_id)
+            set log $logs_by_spawn_ids($spawn_id)
+            puts $log "$time END: $command"
 
-            array unset logs_by_spawn_ids $current_spawn_id
+            array unset logs_by_spawn_ids $spawn_id
+            array unset commands_by_spawn_ids $spawn_id
 
             foreach {target_id receiver_spawn_id} [array get receivers_for_messages] {
-                if {$receiver_spawn_id == $current_spawn_id} {
+                if {$receiver_spawn_id == $spawn_id} {
                     array unset receivers_for_messages $target_id
                 }
             }
