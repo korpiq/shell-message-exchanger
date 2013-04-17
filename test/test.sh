@@ -22,13 +22,14 @@ check ()
 
 each_transmitter_got_each_message ()
 {
-    RE="transmitter [ABC][a-z]* got 'message from [ABC][a-z]*'"
-
-    for LOG in transmitter.sh*.log
+    for RECEIVER in "$@"
     do
-        [ 3 == $(grep -c "$RE" "$LOG") ] &&
-        [ 3 == $(uniq "$LOG" | grep -c "$RE") ] ||
-            return 1
+        for SENDER in "$@"
+        do
+            grep -q "transmitter $RECEIVER got 'message from $SENDER'" \
+                $RECEIVER.log ||
+                return 1
+        done
     done
 }
 
@@ -45,10 +46,8 @@ OUT=$(run ./sender.sh ./receiver.sh)
 echo "$OUT" | check grep -q "got 'a message'"
 
 echo -n 'try to pass messages forth and back between transmitters: '
-
-run --log='{}' "./transmitter.sh Alice" \
-        "./transmitter.sh Bob" \
-        "./transmitter.sh Cecilia"
-check each_transmitter_got_each_message
+NAMES="Alice Bob Cecilia"
+run --log='{}' --prefix='./transmitter.sh ' $NAMES
+check each_transmitter_got_each_message $NAMES
 
 exit $RESULT
