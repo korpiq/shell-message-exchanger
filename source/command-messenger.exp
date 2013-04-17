@@ -17,8 +17,8 @@ array set commands_by_spawn_ids []
 array set option []
 set option(log) ""
 set option(once) ""
-set option(ask) "receive"
-set option(tell) "send"
+set option(receive) "receive (\[^\r\n]*)\r\n"
+set option(send) "send (\[^\r\n:]*): (\[^\r\n]*)\r\n"
 set option(prefix) ""
 set option(suffix) ""
 
@@ -28,11 +28,23 @@ set usage "Usage: command-messenger.exp \[--option=value|command] ...
 Options:
     log     Filename to log to. Denote command with {}. Default empty=stdout.
     once    Set to only receive messages once. Default empty=keep receiving.
-    ask     Identifier for listening to messages. Default 'receive'.
-    tell    Identifier for sending messages. Default 'send'.
+    receive Regular expression for registrations to receive messages.
+            Default 'receive (\\\[^\\r\\n]*)\\r\\n'.
+            Catch group required for identifier of messages to receive.
+    send    Regular expression to catch messages to pass to listeners.
+            Default 'send (\\\[^\\r\\n:]*): (\\\[^\\r\\n]*)\\r\\n'.
+            First catch group required for recipient identifier.
+            Second catch group required for collecting the message content.
     prefix  Prefix for subsequent commands. Default empty.
     suffix  Suffix for subsequent commands. Default empty.
     help    Show this usage information and exit.
+
+This command is used to run other commands and pass messages between them.
+It shows or logs all other output but hides the messages as they are passed.
+For instance, you may want to pass around credentials for user accounts:
+
+    command-messenger.exp create-account-and-output-credentials.sh \\
+        record-credentials-for-access.sh
 "
 
 foreach arg $argv {
@@ -73,9 +85,6 @@ foreach arg $argv {
     }
 }
 
-set send_re "$option(tell) (\[^\r\n]*): (\[^\r\n]*)\r\n"
-set receive_re "$option(ask) (\[^\r\n]*)\r\n"
-
 proc pass_messages {} {
     global messages_from_senders
     global receivers_for_messages
@@ -102,7 +111,7 @@ while {[array size logs_by_spawn_ids] > 0} {
 
     expect {
         -i [array names logs_by_spawn_ids]
-        -re $send_re {
+        -re $option(send) {
             set id $expect_out(1,string)
             set message $expect_out(2,string)
             puts $logs_by_spawn_ids($expect_out(spawn_id)) "(send $id)\n"
@@ -110,7 +119,7 @@ while {[array size logs_by_spawn_ids] > 0} {
             pass_messages
             exp_continue
         }
-        -re $receive_re {
+        -re $option(receive) {
             set current_spawn_id $expect_out(spawn_id)
             set message_id $expect_out(1,string)
             puts $logs_by_spawn_ids($expect_out(spawn_id)) "(receive $message_id)"

@@ -38,7 +38,7 @@ OUT=$(run --badmojo=here)
 echo "$OUT" | check grep -q "^Invalid option 'badmojo'"
 
 echo -n 'accept all good options: '
-OUT=$(run --prefix= --suffix= --log= --once= --ask= --tell=)
+OUT=$(run --prefix= --suffix= --log= --once= --send= --receive=)
 check test "$OUT" = ""
 
 echo -n 'try to pass message from one shell to another: '
