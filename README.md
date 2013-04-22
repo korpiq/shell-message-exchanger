@@ -10,3 +10,4 @@ Test results on different systems
 ---------------------------------
 
 Tests pass with expect version 5.44.1.11 on Darwin 10.8.0
+Tests pass with expect version 5.44.1.15 on Linux 3.2.39-grbfs-kapsi
