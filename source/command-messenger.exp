@@ -17,6 +17,8 @@ array set logs_by_spawn_ids []
 # spawn_id command
 array set commands_by_spawn_ids []
 
+set exit_status 0
+
 array set option []
 set option(log) ""
 set option(receive) "^receive (\[^\r\n]*)\r\n"
@@ -143,11 +145,16 @@ while {[array size logs_by_spawn_ids] > 0} {
         }
         eof {
             set spawn_id $expect_out(spawn_id)
+            catch wait child_result
+            set child_exit_status [lindex $child_result 3]
+            if {$exit_status == 0 && $child_exit_status > 0} {
+                set exit_status $child_exit_status
+            }
 
             set time [clock format [clock seconds] -format "\[%Y-%m-%d %T]"]
             set command $commands_by_spawn_ids($spawn_id)
             set log $logs_by_spawn_ids($spawn_id)
-            puts $log "$time END: $command"
+            puts $log "$time END: $command ($child_exit_status)"
 
             array unset logs_by_spawn_ids $spawn_id
             array unset commands_by_spawn_ids $spawn_id
@@ -161,3 +168,5 @@ while {[array size logs_by_spawn_ids] > 0} {
     }
 
 }
+
+exit $exit_status

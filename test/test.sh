@@ -74,8 +74,12 @@ check each_transmitter_log_got_each_message_once $NAMES
 
 echo -n 'several clients can log into same file: '
 NAMES="Alice Bob Cecilia"
-LOGFILE='AllInOne.log'
+LOGFILE='all-in-one.log'
 run --log="$LOGFILE" --prefix='./transmitter.sh ' $NAMES
 check log_got_each_message_once "$LOGFILE" $NAMES
+
+echo -n 'error status is passed through: '
+run 'echo ok before' '/bin/bash -c "exit 123"' 'echo ok after' >& /dev/null
+check test 123 = $?
 
 exit $RESULT
