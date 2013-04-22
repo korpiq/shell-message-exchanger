@@ -19,7 +19,6 @@ array set commands_by_spawn_ids []
 
 array set option []
 set option(log) ""
-set option(once) ""
 set option(receive) "^receive (\[^\r\n]*)\r\n"
 set option(send) "^send (\[^\r\n:]*): (\[^\r\n]*)\r\n"
 set option(prefix) ""
@@ -30,12 +29,11 @@ set option_re "--(\[a-z_]*)=(.*)"
 set usage "Usage: command-messenger.exp \[--option=value|command] ...
 Options:
     log     Filename to log to. Denote command with {}. Default empty=stdout.
-    once    Set to only receive messages once. Default empty=keep receiving.
     receive Regular expression for registrations to receive messages.
-            Default 'receive (\\\[^\\r\\n]*)\\r\\n'.
+            Default '^receive (\\\[^\\r\\n]*)\\r\\n'.
             Catch group required for identifier of messages to receive.
     send    Regular expression to catch messages to pass to listeners.
-            Default 'send (\\\[^\\r\\n:]*): (\\\[^\\r\\n]*)\\r\\n'.
+            Default '^send (\\\[^\\r\\n:]*): (\\\[^\\r\\n]*)\\r\\n'.
             First catch group required for recipient identifier.
             Second catch group required for collecting the message content.
     prefix  Prefix for subsequent commands. Default empty.
