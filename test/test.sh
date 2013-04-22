@@ -26,6 +26,8 @@ transmitter_log_contains_message_from_each ()
     LOGFILE="$2"
     shift 2
 
+    [ -f "$LOGFILE" ] || return 1
+
     for SENDER in "$@"
     do
         MSG="transmitter $RECEIVER got 'message from $SENDER'"
@@ -81,5 +83,18 @@ check log_got_each_message_once "$LOGFILE" $NAMES
 echo -n 'error status is passed through: '
 run 'echo ok before' '/bin/bash -c "exit 123"' 'echo ok after' >& /dev/null
 check test 123 = $?
+
+# report status for this platform in README
+VERSIONS="$(expect -version) on $(uname -sr)"
+[ 0 = "$RESULT" ] && HOW=pass || HOW=fail
+README=../README.md
+if grep -q "^Tests [a-z]* with $VERSIONS$" "$README"
+then
+    sed -i~ -e \
+        "s/^Tests [a-z]* with $VERSIONS$/Tests $HOW with $VERSIONS/" \
+        "$README"
+else
+    echo "Tests $HOW with $VERSIONS" >> "$README"
+fi
 
 exit $RESULT
