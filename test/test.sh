@@ -20,16 +20,38 @@ check ()
     fi
 }
 
-each_transmitter_got_each_message ()
+transmitter_log_contains_message_from_each ()
+{
+    RECEIVER="$1"
+    LOGFILE="$2"
+    shift 2
+
+    for SENDER in "$@"
+    do
+        MSG="transmitter $RECEIVER got 'message from $SENDER'"
+        [ 1 == $(grep -c "$MSG" "$LOGFILE") ] || return 1
+    done
+}
+
+each_transmitter_log_got_each_message_once ()
 {
     for RECEIVER in "$@"
     do
-        for SENDER in "$@"
-        do
-            grep -q "transmitter $RECEIVER got 'message from $SENDER'" \
-                $RECEIVER.log ||
+        transmitter_log_contains_message_from_each \
+            "$RECEIVER" "$RECEIVER.log" "$@" ||
                 return 1
-        done
+    done
+}
+
+log_got_each_message_once ()
+{
+    LOGFILE="$1"
+    shift
+    for RECEIVER in "$@"
+    do
+        transmitter_log_contains_message_from_each \
+            "$RECEIVER" "$LOGFILE" "$@" ||
+                return 1
     done
 }
 
@@ -48,6 +70,12 @@ echo "$OUT" | check grep -q "got 'a message'"
 echo -n 'try to pass messages forth and back between transmitters: '
 NAMES="Alice Bob Cecilia"
 run --log='{}' --prefix='./transmitter.sh ' $NAMES
-check each_transmitter_got_each_message $NAMES
+check each_transmitter_log_got_each_message_once $NAMES
+
+echo -n 'several clients can log into same file: '
+NAMES="Alice Bob Cecilia"
+LOGFILE='AllInOne.log'
+run --log="$LOGFILE" --prefix='./transmitter.sh ' $NAMES
+check log_got_each_message_once "$LOGFILE" $NAMES
 
 exit $RESULT

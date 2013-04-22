@@ -2,11 +2,14 @@
 
 log_user 0
 
-# message_id message
-array set messages_from_senders []
-
 # message_id receiver_spawn_id
 array set receivers_for_messages []
+
+# message_id message ...
+array set messages_by_id []
+
+# filename file_handle
+array set logs_by_filenames []
 
 # spawn_id file_handle
 array set logs_by_spawn_ids []
@@ -17,8 +20,8 @@ array set commands_by_spawn_ids []
 array set option []
 set option(log) ""
 set option(once) ""
-set option(receive) "receive (\[^\r\n]*)\r\n"
-set option(send) "send (\[^\r\n:]*): (\[^\r\n]*)\r\n"
+set option(receive) "^receive (\[^\r\n]*)\r\n"
+set option(send) "^send (\[^\r\n:]*): (\[^\r\n]*)\r\n"
 set option(prefix) ""
 set option(suffix) ""
 
@@ -69,7 +72,12 @@ foreach arg $argv {
             if {![regexp -- ".*\.log$" "$log_filename"]} {
                 set log_filename "$log_filename.log"
             }
-            set file_handle [open "$log_filename" "w"]
+            if {[info exists logs_by_filenames($log_filename)]} {
+                set file_handle $logs_by_filenames($log_filename)
+            } else {
+                set file_handle [open "$log_filename" "w"]
+                array set logs_by_filenames [list $log_filename $file_handle]
+            }
         } else {
             set file_handle stdout
         }
@@ -85,24 +93,28 @@ foreach arg $argv {
     }
 }
 
-proc pass_messages {} {
-    global messages_from_senders
+proc pass_message {message_id message} {
+    global messages_by_id
     global receivers_for_messages
-    global option
 
-    foreach {message_id message} [array get messages_from_senders] {
-        set receivers_found 0
+    lappend messages_by_id($message_id) $message
 
-        foreach {target_id receiver_spawn_id} [array get receivers_for_messages $message_id.*] {
-            send -i $receiver_spawn_id -- "$message\n"
-            incr receivers_found
-        }
+    foreach {target_id receiver_spawn_id} [array get receivers_for_messages $message_id.*] {
+        send -i $receiver_spawn_id -- "$message\n"
+    }
+}
 
-        if {$receivers_found > 0} {
-            array unset messages_from_senders $message_id
-            if {$option(once) > 0} {
-                array unset receivers_for_messages $message_id
-            }
+proc request_messages {receiver_id message_id} {
+    global receivers_for_messages
+    global messages_by_id
+
+    array set receivers_for_messages [
+        list $message_id.$receiver_id $receiver_id
+    ]
+
+    if {[info exists messages_by_id($message_id)]} {
+        foreach {message} $messages_by_id($message_id) {
+            send -i $receiver_id -- "$message\n"
         }
     }
 }
@@ -115,8 +127,8 @@ while {[array size logs_by_spawn_ids] > 0} {
             set id $expect_out(1,string)
             set message $expect_out(2,string)
             puts $logs_by_spawn_ids($expect_out(spawn_id)) "(send $id)\n"
-            array set messages_from_senders [list $id $message]
-            pass_messages
+
+            pass_message $id $message
             exp_continue
         }
         -re $option(receive) {
@@ -124,10 +136,7 @@ while {[array size logs_by_spawn_ids] > 0} {
             set message_id $expect_out(1,string)
             puts $logs_by_spawn_ids($expect_out(spawn_id)) "(receive $message_id)"
 
-            array set receivers_for_messages [
-                list $message_id.$current_spawn_id $current_spawn_id
-            ]
-            pass_messages
+            request_messages $current_spawn_id $message_id
             exp_continue
         }
         -re "(\[^\r\n]*)\[\r\n]+" {
